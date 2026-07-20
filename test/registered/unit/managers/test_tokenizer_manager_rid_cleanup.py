@@ -29,6 +29,18 @@ from sglang.srt.observability.req_time_stats import APIServerReqTimeStats
 
 register_cpu_ci(est_time=15, suite="base-a-test-cpu")
 
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_runtime_context():
+    from sglang.srt.runtime_context import reset_context
+
+    yield
+    reset_context()
+
+
 _NOT_FINISHED = object()  # Sentinel: request has not finished yet
 
 # ---------------------------------------------------------------------------
@@ -118,6 +130,13 @@ def _make_tokenizer_manager() -> TokenizerManager:
     tm.dump_requests_folder = ""
     tm.crash_dump_folder = ""
     tm.send_to_scheduler = MagicMock()
+
+    # TokenizerManager reads resolved config through the published namespace bags
+    # (get_serving()/...); seed a real resolved ServerArgs so those reads resolve.
+    from sglang.srt.runtime_context import publish
+    from sglang.srt.server_args import ServerArgs
+
+    publish(ServerArgs(model_path="dummy", weight_version="1"), role="tokenizer")
     return tm
 
 

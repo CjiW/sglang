@@ -21,6 +21,17 @@ register_cuda_ci(est_time=5, stage="base-b", runner_config="1-gpu-small")
 register_amd_ci(est_time=5, suite="stage-b-test-1-gpu-small-amd")
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_runtime_context():
+    from sglang.srt.runtime_context import reset_context
+
+    yield
+    reset_context()
+
+
 class TestDisaggregationPriorityQueueing(unittest.TestCase):
     def _new_scheduler(self, disaggregation_mode: DisaggregationMode) -> Scheduler:
         scheduler = Scheduler.__new__(Scheduler)
@@ -409,6 +420,11 @@ class TestCommonKVManagerPrefillRecompute(unittest.TestCase):
 
 class TestDecodePrebuiltPriority(unittest.TestCase):
     def test_waiting_queue_is_sorted_before_prebuilt_selection(self):
+        # get_new_prebuilt_batch reads get_disagg() from the published config.
+        from sglang.srt.runtime_context import publish
+        from sglang.srt.server_args import ServerArgs
+
+        publish(ServerArgs(model_path="dummy"), role="scheduler")
         scheduler = Scheduler.__new__(Scheduler)
         scheduler.grammar_manager = MagicMock()
         scheduler.grammar_manager.has_waiting_grammars.return_value = False
