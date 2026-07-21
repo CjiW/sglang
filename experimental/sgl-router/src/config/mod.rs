@@ -61,6 +61,9 @@ impl Config {
             // `K8sDiscoveryMode` is already valid here. Any namespace
             // (including empty, for a cluster-wide watch) is accepted.
             DiscoveryBackend::K8s(_) => {}
+            // HTTP-registry: no additional validation needed — workers
+            // self-register at runtime; an empty pool at startup is valid.
+            DiscoveryBackend::HttpRegistry(_) => {}
         }
         Ok(())
     }

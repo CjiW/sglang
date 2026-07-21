@@ -12,7 +12,7 @@ use std::num::NonZeroU32;
 use crate::config::{
     default_cb_cool_down, default_proxy_request_timeout_secs, default_stale_request_timeout_secs,
     resolve_mode, ActiveLoadConfig, CacheAwareConfig, CircuitBreakerConfig, Config,
-    DiscoveryBackend, K8sDiscoveryConfig, LogFormat, ModelConfig, ObservabilityConfig, PolicyKind,
+    DiscoveryBackend, HttpRegistryConfig, K8sDiscoveryConfig, LogFormat, ModelConfig, ObservabilityConfig, PolicyKind,
     ProxyConfig, ServerConfig, StaticUrlsDiscoveryConfig, StickyConfig,
 };
 
@@ -115,6 +115,17 @@ pub struct Cli {
     /// PD-mode decode label selector terms. Requires `--prefill-selector`.
     #[arg(long, num_args = 1..)]
     pub decode_selector: Vec<String>,
+
+    // ---- discovery: http-registry ----
+    /// Enable HTTP-based dynamic worker registration. Workers self-register
+    /// via `POST /register` on startup. Mutually exclusive with
+    /// `--worker-urls` and `--service-discovery`.
+    #[arg(long)]
+    pub http_registry: bool,
+    /// Port for the HTTP registry server (used with `--http-registry`).
+    /// Defaults to 9090.
+    #[arg(long, default_value_t = 9090)]
+    pub http_registry_port: u16,
 
     // ---- proxy / active-load ----
     /// Per-request upstream timeout in seconds.
@@ -291,19 +302,22 @@ impl Cli {
     /// combination is never stored.
     fn build_discovery(&self) -> Result<DiscoveryBackend> {
         let has_static = !self.worker_urls.is_empty();
-        let backend = match (has_static, self.service_discovery) {
-            (true, true) => {
+        let has_http = self.http_registry;
+
+        // Three-way mutual exclusivity: static, k8s, http-registry.
+        let backend = match (has_static, self.service_discovery, has_http) {
+            (true, true, _) | (true, _, true) | (_, true, true) => {
                 return Err(anyhow!(
-                    "--worker-urls and --service-discovery are mutually exclusive; pass exactly one"
+                    "--worker-urls, --service-discovery, and --http-registry are mutually exclusive; pass exactly one"
                 ))
             }
-            (false, false) => {
+            (false, false, false) => {
                 return Err(anyhow!(
-                    "no discovery backend selected; pass --worker-urls <URL...> (static) \
-                     or --service-discovery (kubernetes)"
+                    "no discovery backend selected; pass --worker-urls <URL...> (static), \
+                     --service-discovery (kubernetes), or --http-registry (dynamic registration)"
                 ))
             }
-            (true, false) => {
+            (true, false, false) => {
                 if self.service_discovery_namespace.is_some()
                     || !self.selector.is_empty()
                     || !self.prefill_selector.is_empty()
@@ -318,7 +332,7 @@ impl Cli {
                     urls: self.worker_urls.clone(),
                 })
             }
-            (false, true) => {
+            (false, true, false) => {
                 // Resolve (and validate) the selector flags into a
                 // K8sDiscoveryMode here, so an invalid combination can't be
                 // stored. Surfaces ConfigError as anyhow for the CLI.
@@ -331,6 +345,12 @@ impl Cli {
                 DiscoveryBackend::K8s(K8sDiscoveryConfig {
                     namespace: self.service_discovery_namespace.clone().unwrap_or_default(),
                     mode,
+                })
+            }
+            (false, false, true) => {
+                DiscoveryBackend::HttpRegistry(HttpRegistryConfig {
+                    host: self.host.clone(),
+                    port: self.http_registry_port,
                 })
             }
         };

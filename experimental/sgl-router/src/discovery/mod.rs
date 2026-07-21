@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 The SGLang Authors
 // SPDX-License-Identifier: Apache-2.0
 
+pub mod http_registry;
 pub mod k8s;
 pub mod static_urls;
 pub mod types;
@@ -28,6 +29,7 @@ pub async fn spawn_discovery(
     let handle = match &cfg.discovery {
         DiscoveryBackend::StaticUrls(s) => static_urls::spawn(s.clone(), tx).await?,
         DiscoveryBackend::K8s(k) => k8s::spawn(k.clone(), tx).await?,
+        DiscoveryBackend::HttpRegistry(h) => http_registry::spawn(h.clone(), tx).await?,
     };
     Ok((rx, handle))
 }

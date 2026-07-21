@@ -262,6 +262,9 @@ pub fn default_cb_cool_down() -> u64 {
 pub enum DiscoveryBackend {
     StaticUrls(StaticUrlsDiscoveryConfig),
     K8s(K8sDiscoveryConfig),
+    /// HTTP-based dynamic worker registration. Workers self-register via
+    /// `POST /register` on startup; no restart needed when topology changes.
+    HttpRegistry(HttpRegistryConfig),
 }
 
 /// Fixed list of worker URLs. Each URL is registered once at startup;
@@ -272,6 +275,18 @@ pub enum DiscoveryBackend {
 #[derive(Debug, Clone)]
 pub struct StaticUrlsDiscoveryConfig {
     pub urls: Vec<String>,
+}
+
+/// Configuration for the HTTP-registry discovery backend.
+///
+/// Workers self-register via `POST /register` on the configured port.
+/// No restart is needed when workers are added or removed.
+#[derive(Debug, Clone)]
+pub struct HttpRegistryConfig {
+    /// Bind address for the HTTP registry server (e.g. `0.0.0.0`).
+    pub host: String,
+    /// Port for the HTTP registry server (e.g. `9090`).
+    pub port: u16,
 }
 
 /// Configuration for the Kubernetes `EndpointSlice` discovery backend.
